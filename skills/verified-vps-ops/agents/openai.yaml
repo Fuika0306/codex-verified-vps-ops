@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verified VPS Ops"
+  short_description: "Safely operate and verify Ubuntu VPS services over SSH"
+  default_prompt: "Use $verified-vps-ops to inspect this VPS, make the smallest requested change, preserve unrelated services, and verify the end state."

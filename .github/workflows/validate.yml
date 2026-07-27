@@ -1,0 +1,107 @@
+name: Validate Skill
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu:
+    name: Ubuntu validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+
+      - name: Validate Skill structure and content
+        run: python tests/validate_skill.py
+
+      - name: Validate Bash helper security boundaries
+        shell: bash
+        run: bash tests/test_helpers.sh
+
+      - name: Validate Bash helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n skills/verified-vps-ops/scripts/remote-preflight.sh
+          bash -n skills/verified-vps-ops/scripts/verify-service.sh
+          bash skills/verified-vps-ops/scripts/verify-service.sh \
+            --service app.service \
+            --expect-active inactive \
+            --expect-enabled disabled \
+            --dry-run
+
+  windows:
+    name: Windows validation
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+
+      - name: Validate Skill structure and content
+        run: python -X utf8 tests/validate_skill.py
+
+      - name: Validate PowerShell helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = Resolve-Path 'skills/verified-vps-ops/scripts/remote-preflight.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            $path,
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | Format-List *
+            throw 'PowerShell parse failed.'
+          }
+
+          $dryRun = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+            -File $path `
+            -HostName example.invalid `
+            -User root `
+            -Service app.service `
+            -HealthUrl https://example.invalid/health `
+            -DryRun | ConvertFrom-Json
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Dry-run failed with exit code $LASTEXITCODE."
+          }
+          if ($dryRun.Mode -ne 'dry-run') {
+            throw 'Unexpected dry-run mode.'
+          }
+          if ($dryRun.IncludeJournal -ne $false) {
+            throw 'Journal output must be disabled by default.'
+          }
+          if ($dryRun.RemoteCommand -ne 'base64 --decode --ignore-garbage | bash') {
+            throw 'Unexpected SSH transport command.'
+          }
+
+      - name: Validate PowerShell helper security boundaries
+        shell: pwsh
+        run: ./tests/test_remote_preflight.ps1
