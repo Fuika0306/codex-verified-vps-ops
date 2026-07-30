@@ -1,4 +1,8 @@
-# verified-vps-ops
+# Codex 多功能 VPS 維運與驗證工具
+
+這是一個從 Windows／PowerShell 管理 Ubuntu VPS 的 Codex Skill，涵蓋
+SSH、systemd、Docker Compose、Caddy、備份、回滾與操作後驗證，並以
+最小範圍變更保留其他服務與資料。
 
 A Codex Skill for operating user-controlled Ubuntu VPS services from Windows or
 PowerShell over SSH with small reversible changes, protected secrets, explicit
